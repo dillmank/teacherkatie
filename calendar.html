@@ -49,15 +49,67 @@
 
 <!-- Calendar Initialization -->
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-  var calendarEl = document.getElementById('calendar');
-  var calendar = new FullCalendar.Calendar(calendarEl, {
+document.addEventListener('DOMContentLoaded', function () {
+  let calendarEl = document.getElementById('calendar');
+  let selectedSessions = [];
+
+  let calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
-    events: 'https://teacherkatie-backend.onrender.com/api/slots'
+    events: 'https://teacherkatie-backend.onrender.com/api/slots',
+    selectable: true,
+    selectOverlap: false,
+    selectMirror: true,
+    selectAllow: function(info) {
+      return info.allDay === false;
+    },
+    eventClick: function (info) {
+      const startTime = info.event.start.toISOString();
+      const index = selectedSessions.indexOf(startTime);
+
+      if (index > -1) {
+        // Already selected — remove it
+        selectedSessions.splice(index, 1);
+        info.el.style.backgroundColor = '';
+      } else {
+        // Not selected — add it
+        selectedSessions.push(startTime);
+        info.el.style.backgroundColor = 'green';
+      }
+
+      // Show selected times to user
+      document.getElementById('selectedSessions').innerText =
+        selectedSessions.map(d => new Date(d).toLocaleString()).join('\n');
+    }
   });
-  timeZone: 'UTC'
+
   calendar.render();
-});
+
+  // Hook into form submission
+  document.getElementById('booking-form').addEventListener('submit', async function (e) {
+    e.preventDefault();
+
+    const sessionData = {
+      name: document.getElementById('studentName').value,
+      email: document.getElementById('studentEmail').value,
+      sessions: selectedSessions  // sending multiple selected dates
+    };
+
+    const stripe = Stripe('pk_live_WOAWoe7lG7ASYnXJxwG3yBqX');
+
+    fetch('https://teacherkatie-backend.onrender.com/api/create-checkout-session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData)
+    })
+      .then(res => res.json())
+      .then(session => {
+        return stripe.redirectToCheckout({ sessionId: session.id });
+      })
+      .catch(err => {
+        alert('Error connecting to backend!');
+        console.error(err);
+      });
+
 </script>
 <!-- Booking Form -->
 <div class="container py-5">
@@ -77,6 +129,9 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
     <button type="submit" class="btn btn-primary">Proceed to Payment</button>
   </form>
+  <div class="mt-3">
+  <strong>Selected Sessions:</strong>
+  <pre id="selectedSessions">(Click calendar dates to select)</pre>
 </div>
 
 <!-- Stripe.js -->
